@@ -2,7 +2,7 @@ version: "3"
   
 services:
   bookstack:
-    image: "bloodstar/bookstack:v2.10_node"
+    image: "bloodstar/bookstack:latest"
     container_name: bookstack
     ports:
       - "8181:8181"
