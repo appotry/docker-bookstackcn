@@ -1,34 +1,56 @@
-name: Docker Image CI
+name: Build Docker Image
 
 on:
   push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
-
-env:
-  BOOKSTACK_VERSION: v2.10
-  DOCKERHUB_USERNAME: willdockerhub
-  ALIYUN_USERNAME: willzhmic@outlook.com
-  ALIYUN_REGISTRY_URL: registry.cn-shenzhen.aliyuncs.com
-
+    branches:
+      - main
+      - master
+  schedule:
+    # * is a special character in YAML so you have to quote this string
+    # UTC 17:00 -> CST (China) 1:00, see https://datetime360.com/cn/utc-cst-china-time/
+    # - cron: '0 17 * * *'
+    # 每月最后一天10:15分运行
+    # - cron: '0 15 10 L * ?'
+    # 每月第一天0:0分运行
+    - cron: '0 0 1 * *'
+  workflow_dispatch:
 
 jobs:
-  get-images:
+  buildx:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout
-      uses: actions/checkout@v2
+      - name: Checkout
+        uses: actions/checkout@v2
 
-    # Login aliyun registry
-    - name: Login aliyun and docker registry
-      run: |
-        echo "${{ secrets.ALIYUN_PASSWORD }}" | docker login $ALIYUN_REGISTRY_URL -u $ALIYUN_USERNAME --password-stdin
-        echo "${{ secrets.DOCKERHUB_PASSWORD }}" | docker login -u $DOCKERHUB_USERNAME --password-stdin
-        
-    # pull retag and push images
-    - name: get images
-      run: |
-        docker build . --file Dockerfile.node --tag willdockerhub/bookstack:${BOOKSTACK_VERSION}_node
-        docker push willdockerhub/bookstack:${BOOKSTACK_VERSION}_node
+      # Docker Image 构建环境
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v1 
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # ReleaseTag
+      - name: Set Version
+        id: set-version
+        run: |
+          echo "::set-output name=version::$(date +"%y-%m-%d")"
+          echo $(date +"%y-%m-%d")
+          echo "::set-output name=status::success"
+          
+      # Build and push
+      - name: Build dockerfile
+        if: steps.set-version.outputs.status == 'success'
+        uses: docker/build-push-action@v2
+        with:
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm/v7,linux/arm64
+          push: true
+          tags: |
+            bloodstar/bookstack:stable-${{ steps.set-version.outputs.version }}
+            bloodstar/bookstack:latest
